@@ -1,0 +1,16 @@
+<configuration>
+<!-- This sample template for net.nous.open.logback.SlackWebhookAppender -->
+    <appender name="slack" class="net.nous.open.logback.SlackWebhookAppender">
+        <webhookUrl>${logback.slack.webhookUrl}</webhookUrl>
+        <username>${logback.slack.username}</username>            
+        <channel>${logback.slack.channel}</channel>
+        <!-- Formatting -->
+        <layout class="ch.qos.logback.classic.PatternLayout">
+            <pattern>${logback.pattern}</pattern>
+        </layout>
+    </appender>
+        
+  <root level="DEBUG">
+    <appender-ref ref="STDOUT" />
+  </root>
+</configuration>
