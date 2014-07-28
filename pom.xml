@@ -1,10 +1,9 @@
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <groupId>net.nous.open</groupId>
   <artifactId>nous-open</artifactId>
   <packaging>jar</packaging>
-  <version>dev-SNAPSHOT</version>
+  <version>1.0.1</version>
   <description>nextBuildVersion=1.0.1;</description>
   <name>nous-open</name>
   <url>http://maven.apache.org</url>
@@ -12,7 +11,7 @@
   <scm>
     <connection>scm:git:git@github.com:nousinc/nous-open.git</connection>
     <developerConnection>scm:git:git@github.com:nousinc/nous-open.git</developerConnection>
-    <tag>HEAD</tag>
+    <tag>nous-open-1.0.1</tag>
   </scm>
   <dependencies>
 	<dependency>
