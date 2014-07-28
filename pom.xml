@@ -8,6 +8,12 @@
   <description>nextBuildVersion=1.0.1;</description>
   <name>nous-open</name>
   <url>http://maven.apache.org</url>
+  <inceptionYear>2014</inceptionYear>
+  <scm>
+    <connection>scm:git:git@github.com:nousinc/nous-open.git</connection>
+    <developerConnection>scm:git:git@github.com:nousinc/nous-open.git</developerConnection>
+    <tag>HEAD</tag>
+  </scm>
   <dependencies>
 	<dependency>
 		<groupId>com.googlecode.json-simple</groupId>
