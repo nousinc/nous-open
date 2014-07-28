@@ -3,7 +3,7 @@
   <groupId>net.nous.open</groupId>
   <artifactId>nous-open</artifactId>
   <packaging>jar</packaging>
-  <version>1.0.1</version>
+  <version>dev-SNAPSHOT</version>
   <description>nextBuildVersion=1.0.1;</description>
   <name>nous-open</name>
   <url>http://maven.apache.org</url>
@@ -11,7 +11,7 @@
   <scm>
     <connection>scm:git:git@github.com:nousinc/nous-open.git</connection>
     <developerConnection>scm:git:git@github.com:nousinc/nous-open.git</developerConnection>
-    <tag>nous-open-1.0.1</tag>
+    <tag>HEAD</tag>
   </scm>
   <dependencies>
 	<dependency>
