@@ -59,7 +59,7 @@ public class SlackWebhookAppender extends AppenderBase<ILoggingEvent> {
           }
     }
 
-	public void addEventToBuffer(final ILoggingEvent evt) {
+	private void addEventToBuffer(final ILoggingEvent evt) {
 		if (eventBuffer.size() < MAX_EVENT_BUFFER_SIZE)
 	    	eventBuffer.add(evt);
 	}
@@ -71,7 +71,6 @@ public class SlackWebhookAppender extends AppenderBase<ILoggingEvent> {
       }
 
 	private void send(List<ILoggingEvent> events, ILoggingEvent lastEvent) {
-		
         StringBuffer sbuf = new StringBuffer();
         // add batching message if applicable
         if (eventsAreBatched(events, lastEvent)) { 
