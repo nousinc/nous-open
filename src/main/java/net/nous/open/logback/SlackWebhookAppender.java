@@ -24,7 +24,7 @@ public class SlackWebhookAppender extends AppenderBase<ILoggingEvent> {
     private int maxSlackTextLength = 1024;
     private int batchingSecs = 10;
     
-    private List<ILoggingEvent> eventBuffer = new CopyOnWriteArrayList<ILoggingEvent>();
+    private Queue<ILoggingEvent> eventBuffer = new ConcurrentLinkedQueue<ILoggingEvent>();
     private ScheduledExecutorService scheduler;
     
     @Override
@@ -52,22 +52,18 @@ public class SlackWebhookAppender extends AppenderBase<ILoggingEvent> {
 		if (eventBuffer.size() < MAX_EVENT_BUFFER_SIZE)
 	    	eventBuffer.add(evt);
 	}
-    
-    private void fillBuffer(List<ILoggingEvent> events, StringBuffer sbuf) {
-        for (ILoggingEvent event : events) {
-          sbuf.append(extractEventText(event));
-        }
-      }
 
 	private void sendBufferIfItIsNotEmpty() {
-		if (eventBuffer.size() <= 0)
+		if (eventBuffer.isEmpty())
 			return;
 		
         StringBuffer sbuf = new StringBuffer();
         // appending events
-        fillBuffer(eventBuffer, sbuf);
+    	while (!eventBuffer.isEmpty()) {
+    		sbuf.append(extractEventText(eventBuffer.poll()));
+    	}
         eventBuffer.clear();
-        String slackText = sbuf.length() <= maxSlackTextLength ? sbuf.toString() : sbuf.substring(0, maxSlackTextLength - 6) + "\n..\n..";
+        String slackText = sbuf.length() <= maxSlackTextLength ? sbuf.toString() : sbuf.substring(0, maxSlackTextLength - 8) + "..\n..\n..";
 		sendTextToSlack(slackText);
 	}
 
