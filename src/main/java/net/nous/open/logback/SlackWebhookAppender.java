@@ -13,7 +13,6 @@ import org.json.simple.JSONObject;
  * Batched Logback appender for Slack through its webhook api
  */
 public class SlackWebhookAppender extends AppenderBase<ILoggingEvent> {
-	private static final int MAX_EVENT_BUFFER_SIZE = 20;
 	private String webhookUrl;
     private URL url;
     private String channel;
@@ -21,7 +20,7 @@ public class SlackWebhookAppender extends AppenderBase<ILoggingEvent> {
     private String iconEmoji;
     private Layout<ILoggingEvent> layout;
     private int maxLoggingEventLength = 256;
-    private int maxSlackTextLength = 1024;
+    private int maxSlackTextLength = 2048;
     private int batchingSecs = 10;
     
     private Queue<ILoggingEvent> eventBuffer = new ConcurrentLinkedQueue<ILoggingEvent>();
@@ -49,8 +48,7 @@ public class SlackWebhookAppender extends AppenderBase<ILoggingEvent> {
     }
 
 	private void addEventToBuffer(final ILoggingEvent evt) {
-		if (eventBuffer.size() < MAX_EVENT_BUFFER_SIZE)
-	    	eventBuffer.add(evt);
+		eventBuffer.add(evt);
 	}
 
 	private void sendBufferIfItIsNotEmpty() {
@@ -59,12 +57,18 @@ public class SlackWebhookAppender extends AppenderBase<ILoggingEvent> {
 		
         StringBuffer sbuf = new StringBuffer();
         // appending events
-    	while (!eventBuffer.isEmpty()) {
-    		sbuf.append(extractEventText(eventBuffer.poll()));
+        ILoggingEvent event = null;
+    	while ((event = eventBuffer.poll()) != null && sbuf.length() <= maxSlackTextLength) {
+    		sbuf.append(extractEventText(event));
     	}
-        eventBuffer.clear();
-        String slackText = sbuf.length() <= maxSlackTextLength ? sbuf.toString() : sbuf.substring(0, maxSlackTextLength - 8) + "..\n..\n..";
+    	int remaining = eventBuffer.size();
+    	eventBuffer.clear();
+        String slackText = trim(sbuf.toString(), maxSlackTextLength, "..\n.. and " + remaining + " more");
 		sendTextToSlack(slackText);
+	}
+	
+	private String trim(String text, int maxLen, String appendingText) {
+		return text.length() <= maxLen ? text : text.substring(0, maxLen - appendingText.length()) + appendingText;
 	}
 
 	private void sendTextToSlack(String slackText) {
@@ -106,7 +110,7 @@ public class SlackWebhookAppender extends AppenderBase<ILoggingEvent> {
 
 	private String extractEventText(ILoggingEvent lastEvent) {
 		String text = layout.doLayout(lastEvent);
-		text = text.length() <= maxLoggingEventLength ? text : text.substring(0, maxLoggingEventLength-2) + "..";
+		text = trim(text, maxLoggingEventLength, "..");
 		return text;
 	}
 
