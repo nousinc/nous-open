@@ -1,9 +1,11 @@
 package net.nous.open.logback;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.*;
+
 import java.io.*;
 import java.net.*;
 import java.util.*;
+import java.util.concurrent.*;
 
 import org.json.simple.JSONObject;
 
@@ -11,8 +13,6 @@ import org.json.simple.JSONObject;
  * Batched Logback appender for Slack through its webhook api
  */
 public class SlackWebhookAppender extends AppenderBase<ILoggingEvent> {
-	private static final String BATCHING_WARNING_MESSAGE = "[Slack Appender] The current and the susquent messages will be batched to prevent exceeding slack message limit";
-	private static final String BATCHING_REMINDER_MESSAGE = "[Slack Appender] Following message(s) are batched\n";
 	private static final int MAX_EVENT_BUFFER_SIZE = 20;
 	private String webhookUrl;
     private URL url;
@@ -22,41 +22,30 @@ public class SlackWebhookAppender extends AppenderBase<ILoggingEvent> {
     private Layout<ILoggingEvent> layout;
     private int maxLoggingEventLength = 256;
     private int maxSlackTextLength = 1024;
-    private boolean asynchronousSending = true; // async by default
+    private int batchingSecs = 10;
     
-    private long lastSendEventMillis = -1;
-    private int batchingTimeFrameMills = 2000; // batch message into two seconds window
-    private List<ILoggingEvent> eventBuffer = new ArrayList<ILoggingEvent>(MAX_EVENT_BUFFER_SIZE);
+    private List<ILoggingEvent> eventBuffer = new CopyOnWriteArrayList<ILoggingEvent>();
+    private ScheduledExecutorService scheduler;
+    
+    @Override
+    public void start() {
+    	if (scheduler == null) {
+    		initializeOrResetScheduler();
+    	}
+    	super.start();
+    }
 
+	private synchronized void initializeOrResetScheduler() {
+		if (scheduler != null) {
+			scheduler.shutdownNow();
+		}
+		scheduler = Executors.newScheduledThreadPool(1);
+		scheduler.scheduleAtFixedRate(new SenderRunnable(), batchingSecs, batchingSecs, TimeUnit.SECONDS);
+	}
+    
     @Override
     protected void append(final ILoggingEvent evt) {
     	addEventToBuffer(evt);
-		long now = System.currentTimeMillis();
-    	if (now - lastSendEventMillis < batchingTimeFrameMills) {
-    		// send the warning message when it batch the first item
-    		if (eventBuffer.size() == 1) {
-    	        if (asynchronousSending) {
-    	            // perform actual sending asynchronously
-    	            context.getExecutorService().execute(new SenderRunnable(BATCHING_WARNING_MESSAGE));
-    	          } else {
-    	            // synchronous sending
-    	            sendTextToSlack(BATCHING_WARNING_MESSAGE);
-    	          }
-    		}
-    		return;
-    	}
-    	lastSendEventMillis = now;
-    	
-    	List<ILoggingEvent> cloneEvents = new ArrayList<ILoggingEvent>(eventBuffer);
-    	eventBuffer.clear();
-    	
-        if (asynchronousSending) {
-            // perform actual sending asynchronously
-            context.getExecutorService().execute(new SenderRunnable(cloneEvents, evt));
-          } else {
-            // synchronous sending
-            send(cloneEvents, evt);
-          }
     }
 
 	private void addEventToBuffer(final ILoggingEvent evt) {
@@ -70,20 +59,19 @@ public class SlackWebhookAppender extends AppenderBase<ILoggingEvent> {
         }
       }
 
-	private void send(List<ILoggingEvent> events, ILoggingEvent lastEvent) {
-        StringBuffer sbuf = new StringBuffer();
-        // add batching message if applicable
-        if (eventsAreBatched(events, lastEvent)) { 
-        	sbuf.append(BATCHING_REMINDER_MESSAGE);
-        }
-        // appending events
-        fillBuffer(events, sbuf);
-        String slackText = sbuf.length() <= maxSlackTextLength ? sbuf.toString() : sbuf.substring(0, maxSlackTextLength - 6) + "\n..\n..";
+	private void sendBufferIfItIsNotEmpty() {
+		if (eventBuffer.size() <= 0)
+			return;
 		
+        StringBuffer sbuf = new StringBuffer();
+        // appending events
+        fillBuffer(eventBuffer, sbuf);
+        eventBuffer.clear();
+        String slackText = sbuf.length() <= maxSlackTextLength ? sbuf.toString() : sbuf.substring(0, maxSlackTextLength - 6) + "\n..\n..";
 		sendTextToSlack(slackText);
 	}
 
-	public void sendTextToSlack(String slackText) {
+	private void sendTextToSlack(String slackText) {
 		JSONObject obj = null;
 		try {
             obj = new JSONObject();
@@ -118,10 +106,6 @@ public class SlackWebhookAppender extends AppenderBase<ILoggingEvent> {
             ex.printStackTrace();
             addError("Error to post json object to Slack.com (" + channel + "): " + obj, ex);
         }
-	}
-
-	private boolean eventsAreBatched(List<ILoggingEvent> events, ILoggingEvent lastEvent) {
-		return events.size() > 1;
 	}
 
 	private String extractEventText(ILoggingEvent lastEvent) {
@@ -174,36 +158,10 @@ public class SlackWebhookAppender extends AppenderBase<ILoggingEvent> {
 		this.webhookUrl = webhookUrl;
 		this.url = new URL(webhookUrl);
 	}
-
-	public boolean isAsynchronousSending() {
-		return asynchronousSending;
-	}
-
-	public void setAsynchronousSending(boolean asynchronousSending) {
-		this.asynchronousSending = asynchronousSending;
-	}
 	
-	private class SenderRunnable implements Runnable {
-		ILoggingEvent evt;
-		List<ILoggingEvent> cloneEvents;
-		String text;
-		
-		SenderRunnable(String text) {
-			this.text = text;
-		}
-		
-		SenderRunnable(List<ILoggingEvent> cloneEvents, ILoggingEvent evt) {
-			this.cloneEvents = cloneEvents;
-			this.evt = evt;
-		}
-		
+	private class SenderRunnable implements Runnable {		
 		public void run() {
-			if (text != null) {
-				sendTextToSlack(text);
-			}
-			else {
-				send(cloneEvents, evt);
-			}
+			sendBufferIfItIsNotEmpty();
 		}
 	}
 
@@ -223,11 +181,12 @@ public class SlackWebhookAppender extends AppenderBase<ILoggingEvent> {
 		this.maxSlackTextLength = maxSlackTextLength;
 	}
 
-	public int getBatchingTimeFrameMills() {
-		return batchingTimeFrameMills;
+	public int getBatchingSecs() {
+		return batchingSecs;
 	}
 
-	public void setBatchingTimeFrameMills(int batchingTimeFrameMills) {
-		this.batchingTimeFrameMills = batchingTimeFrameMills;
+	public void setBatchingSecs(int batchingSecs) {
+		this.batchingSecs = batchingSecs;
+		initializeOrResetScheduler();
 	}
 }
