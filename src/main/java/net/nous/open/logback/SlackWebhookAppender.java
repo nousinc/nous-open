@@ -4,35 +4,77 @@ import ch.qos.logback.core.*;
 
 import java.io.*;
 import java.net.*;
+import java.util.*;
+import java.util.concurrent.*;
+
 import org.json.simple.JSONObject;
 
 /**
- * Logback appender for Slack through its webhook api
+ * Batched Logback appender for Slack through its webhook api
  */
 public class SlackWebhookAppender extends AppenderBase<ILoggingEvent> {
-    private String webhookUrl;
+	private String webhookUrl;
     private URL url;
     private String channel;
     private String username;
     private String iconEmoji;
     private Layout<ILoggingEvent> layout;
-    private int maxTextLength = 256;
-    private boolean asynchronousSending = true; // async by default
-
+    private int maxLoggingEventLength = 256;
+    private int maxSlackTextLength = 2048;
+    private int batchingSecs = 10;
+    
+    private Queue<ILoggingEvent> eventBuffer = new ConcurrentLinkedQueue<ILoggingEvent>();
+    private ScheduledExecutorService scheduler;
+    
     @Override
-    protected void append(final ILoggingEvent evt) {
-        if (asynchronousSending) {
-            // perform actual sending asynchronously
-            context.getExecutorService().execute(new SenderRunnable(evt));
-          } else {
-            // synchronous sending
-            send(evt);
-          }
+    public void start() {
+    	if (scheduler == null) {
+    		initializeOrResetScheduler();
+    	}
+    	super.start();
     }
 
-	private void send(final ILoggingEvent evt) {
+	private synchronized void initializeOrResetScheduler() {
+		if (scheduler != null) {
+			scheduler.shutdownNow();
+		}
+		scheduler = Executors.newScheduledThreadPool(1);
+		scheduler.scheduleAtFixedRate(new SenderRunnable(), batchingSecs, batchingSecs, TimeUnit.SECONDS);
+	}
+    
+    @Override
+    protected void append(final ILoggingEvent evt) {
+    	addEventToBuffer(evt);
+    }
+
+	private void addEventToBuffer(final ILoggingEvent evt) {
+		eventBuffer.add(evt);
+	}
+
+	private void sendBufferIfItIsNotEmpty() {
+		if (eventBuffer.isEmpty())
+			return;
+		
+        StringBuffer sbuf = new StringBuffer();
+        // appending events
+        ILoggingEvent event = null;
+    	while ((event = eventBuffer.poll()) != null && sbuf.length() <= maxSlackTextLength) {
+    		sbuf.append(extractEventText(event));
+    	}
+    	int remaining = eventBuffer.size();
+    	eventBuffer.clear();
+        String slackText = trim(sbuf.toString(), maxSlackTextLength, "..\n.. and " + remaining + " more");
+		sendTextToSlack(slackText);
+	}
+	
+	private String trim(String text, int maxLen, String appendingText) {
+		return text.length() <= maxLen ? text : text.substring(0, maxLen - appendingText.length()) + appendingText;
+	}
+
+	private void sendTextToSlack(String slackText) {
+		JSONObject obj = null;
 		try {
-            JSONObject obj = new JSONObject();
+            obj = new JSONObject();
             
             if (username != null) {
             	obj.put("username", username);
@@ -43,8 +85,7 @@ public class SlackWebhookAppender extends AppenderBase<ILoggingEvent> {
             if (channel != null) {
             	obj.put("channel", channel);
             }
-            String text = layout.doLayout(evt);       
-            obj.put("text", text.length() <= maxTextLength ? text : text.substring(0, maxTextLength-2) + "..");
+            obj.put("text", slackText);
             
             final byte[] bytes = obj.toJSONString().getBytes("UTF-8");
             final HttpURLConnection conn = (HttpURLConnection) url.openConnection();
@@ -63,8 +104,14 @@ public class SlackWebhookAppender extends AppenderBase<ILoggingEvent> {
             }
         } catch (Exception ex) {
             ex.printStackTrace();
-            addError("Error to post log to Slack.com (" + channel + "): " + evt, ex);
+            addError("Error to post json object to Slack.com (" + channel + "): " + obj, ex);
         }
+	}
+
+	private String extractEventText(ILoggingEvent lastEvent) {
+		String text = layout.doLayout(lastEvent);
+		text = trim(text, maxLoggingEventLength, "..");
+		return text;
 	}
 
     public String getChannel() {
@@ -111,31 +158,35 @@ public class SlackWebhookAppender extends AppenderBase<ILoggingEvent> {
 		this.webhookUrl = webhookUrl;
 		this.url = new URL(webhookUrl);
 	}
-
-	public boolean isAsynchronousSending() {
-		return asynchronousSending;
-	}
-
-	public void setAsynchronousSending(boolean asynchronousSending) {
-		this.asynchronousSending = asynchronousSending;
-	}
-
-	public int getMaxTextLength() {
-		return maxTextLength;
-	}
-
-	public void setMaxTextLength(int maxTextLength) {
-		this.maxTextLength = maxTextLength;
-	}
 	
-	private class SenderRunnable implements Runnable {
-		ILoggingEvent evt;
-		SenderRunnable(ILoggingEvent evt) {
-			this.evt = evt;
-		}
-		
+	private class SenderRunnable implements Runnable {		
 		public void run() {
-			send(evt);
+			sendBufferIfItIsNotEmpty();
 		}
+	}
+
+	public int getMaxLoggingEventLength() {
+		return maxLoggingEventLength;
+	}
+
+	public void setMaxLoggingEventLength(int maxLoggingEventLength) {
+		this.maxLoggingEventLength = maxLoggingEventLength;
+	}
+
+	public int getMaxSlackTextLength() {
+		return maxSlackTextLength;
+	}
+
+	public void setMaxSlackTextLength(int maxSlackTextLength) {
+		this.maxSlackTextLength = maxSlackTextLength;
+	}
+
+	public int getBatchingSecs() {
+		return batchingSecs;
+	}
+
+	public void setBatchingSecs(int batchingSecs) {
+		this.batchingSecs = batchingSecs;
+		initializeOrResetScheduler();
 	}
 }
