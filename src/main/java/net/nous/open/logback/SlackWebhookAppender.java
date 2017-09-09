@@ -71,20 +71,15 @@ public class SlackWebhookAppender extends AppenderBase<ILoggingEvent> {
 		return text.length() <= maxLen ? text : text.substring(0, maxLen - appendingText.length()) + appendingText;
 	}
 
+	@SuppressWarnings("unchecked")
 	private void sendTextToSlack(String slackText) {
 		JSONObject obj = null;
 		try {
             obj = new JSONObject();
             
-            if (username != null) {
-            	obj.put("username", username);
-            }
-            if (iconEmoji != null) {
-            	obj.put("icon_emoji", iconEmoji);
-            }
-            if (channel != null) {
-            	obj.put("channel", channel);
-            }
+            if (username != null) obj.put("username", username);
+            if (iconEmoji != null) obj.put("icon_emoji", iconEmoji);
+            if (channel != null) obj.put("channel", channel);
             obj.put("text", slackText);
             
             final byte[] bytes = obj.toJSONString().getBytes("UTF-8");
