@@ -116,8 +116,10 @@ public class SlackPoster {
             if (conn.getResponseCode() != 200) {
             	throw new IOException("Bad response code: HTTP/1.0 " + conn.getResponseCode());
             }
+        } catch (UnknownHostException ex) {
+        	LOGGER.warn("Cannot reach slack, are you offline? " + obj);
         } catch (Exception ex) {
-        	LOGGER.warn("Unable to post the json to slack " + obj, ex);
+        	LOGGER.warn("Unable to post to slack " + obj, ex);
         }
 	}
 }
