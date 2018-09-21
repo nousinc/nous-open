@@ -5,7 +5,7 @@
   <artifactId>nous-open</artifactId>
   <packaging>jar</packaging>
   <version>dev-SNAPSHOT</version>
-  <description>nextBuildVersion=1.0.4;</description>
+  <description>nextBuildVersion=1.0.5;</description>
   <name>nous-open</name>
   <url>http://maven.apache.org</url>
   <inceptionYear>2014</inceptionYear>
